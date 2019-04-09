@@ -1,0 +1,4 @@
+*.FXP
+/Tests/FXUPERSIST*.XML
+/Tests/FXUResults.*
+/Tools/FxuClassFactory.dbf
