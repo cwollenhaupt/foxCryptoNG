@@ -22,6 +22,17 @@
 *========================================================================================
 Define Class foxCryptoNG as Custom
 
+	*--------------------------------------------------------------------------------------
+	* Various constants used
+	*--------------------------------------------------------------------------------------
+	#define BCRYPT_BLOCK_PADDING        0x00000001
+	#define BCRYPT_PAD_NONE             0x00000001
+	#define BCRYPT_PAD_PKCS1            0x00000002
+	#define BCRYPT_PAD_OAEP             0x00000004
+	#define BCRYPT_PAD_PSS              0x00000008
+	#define BCRYPT_PAD_PKCS1_OPTIONAL_HASH_OID  0x00000010
+	
+
 *========================================================================================
 * Initialize API
 *========================================================================================
@@ -161,6 +172,14 @@ Procedure DeclareApiFunctions
  		Long @pcbResult, ;
  		Long dwFlags
 
+	Declare Long BCryptGetProperty in BCrypt.DLL As BCryptGetProperty_String ;
+		Long hObject, ;
+		String pszProperty, ;
+		String @pbOutput, ;
+		Long cbOutput, ;
+ 		Long @pcbResult, ;
+ 		Long dwFlags
+
 	Declare Long BCryptCreateHash in BCrypt.DLL ;
 		Long hAlgorithm, ;
 		Long @phHash, ;
@@ -244,6 +263,436 @@ Procedure DeclareApiFunctions
 		Long cbOutput, ;
 		Long @pcbResult, ;
 		Long dwFlags	
+	
+	Declare Long BCryptGenerateSymmetricKey in BCrypt.DLL ;
+		Long hAlgorithm, ;
+		Long @phKey, ;
+		String pbKeyObject, ;
+		Long cbKeyObject, ;
+		String pbSecret, ;
+		Long cbSecret, ;
+		Long dwFlags
+	
+*========================================================================================
+* Generates a pair of public and private keys using the RSA (PKCS #1) algorithm. The
+* keys are returned in rcPrivate and rxPublic. These keys are binary data that is only
+* meant to be used with CryptoNG.
+*
+* by default we generate an RSA key with 2048 bits. NIST considers this secure enough 
+* until 2030. Keep in mind, that RSA is not the prefered public/private key algorithm, 
+* as of 2019.
+*
+* You can pass a different length, but the length must be a multiple of 8. Common key
+* length are 2048, 3072 and 4096. Do not use a key length less than 2048, as those
+* are less secure. 
+*
+* Please note that longer key length take substially longer to generate. 
+*========================================================================================
+Procedure GenerateKeys_RSA (rcPrivate, rcPublic, tnKeyLength)
+	
+	*--------------------------------------------------------------------------------------
+	* Stop when we encounter a failure
+	*--------------------------------------------------------------------------------------
+	Local llOK
+	llOK = .T.
+	
+	*--------------------------------------------------------------------------------------
+	* We either use the default key length of 2048 bits or the one that was given to us.
+	*--------------------------------------------------------------------------------------
+	Local lnKeyLength
+	If Empty (m.tnKeyLength)
+		lnKeyLength = 2048
+	Else
+		If m.tnKeyLength % 8 == 0
+			lnKeyLength = m.tnKeyLength
+		Else 
+			llOK = .F.
+		EndIf
+	EndIf
 
+	*--------------------------------------------------------------------------------------
+	* RSA (PKCS #1) algorithm
+	*--------------------------------------------------------------------------------------
+	Local lnAlg
+	lnAlg = 0
+	If m.llOK
+		llOK = BCryptOpenAlgorithmProvider( @lnAlg, Strconv("RSA",5)+Chr(0), NULL, 0 ) == 0
+	EndIf
+
+	*--------------------------------------------------------------------------------------
+	* Generate a new key pair and finaalize it. We could change various key properties 
+	* after generating a key pair. We can only use a key after we finalized it. Once it's
+	* finalized, we can't change any of its properties.
+	*
+	*--------------------------------------------------------------------------------------
+	Local lnKey
+	lnKey = 0
+	If m.llOK
+		llOK = BCryptGenerateKeyPair (m.lnAlg, @lnKey, m.lnKeyLength, 0 ) == 0
+		If m.llOK
+			llOK = BCryptFinalizeKeyPair (lnKey, 0) == 0
+		EndIf 
+	EndIf 
+	
+	*--------------------------------------------------------------------------------------
+	* For encryption wee need to extract the public and the private key.
+	*--------------------------------------------------------------------------------------
+	If m.llOK
+		rcPrivate = This.ExportKey( m.lnKey, "RSAPRIVATEBLOB" )
+		rcPublic = This.ExportKey( m.lnKey, "RSAPUBLICBLOB" )
+		if Empty(m.rcPrivate) or Empty(m.rcPublic)
+			llOK = .F.
+		EndIf
+	EndIf 
+	
+	*--------------------------------------------------------------------------------------
+	* Cleanup
+	*--------------------------------------------------------------------------------------
+	If m.lnAlg != 0
+		BCryptCloseAlgorithmProvider( m.lnAlg, 0 )
+	EndIf 
+	If m.lnKey != 0
+		BCryptDestroyKey( m.lnKey )
+	EndIf
+
+Return m.llOK
+
+*========================================================================================
+* A key handle (tnKey) represents a key pair that contains a private and a public
+* key. tcKey specifies which of these you want to export.
+*========================================================================================
+Procedure ExportKey (tnKey, tcKey)
+
+	*--------------------------------------------------------------------------------------
+	* Stop when we encounter a failure
+	*--------------------------------------------------------------------------------------
+	Local llOK
+	llOK = .T.
+
+	*--------------------------------------------------------------------------------------
+	* Determine the key storage size in bytes
+	*--------------------------------------------------------------------------------------
+	Local lnSize
+	If m.llOK
+		lnSize = 0
+		llOK = BCryptExportKey (m.tnKey, 0, Strconv(m.tcKey,5)+Chr(0), NULL, 0, @lnSize, ;
+			0) == 0
+	EndIf 
+	
+	*--------------------------------------------------------------------------------------
+	* Request the key
+	*--------------------------------------------------------------------------------------
+	Local lcKey
+	If m.llOK
+		lcKey = Space (m.lnSize)
+		llOK = BCryptExportKey ( ;
+			m.tnKey, 0, Strconv(m.tcKey,5)+Chr(0), @lcKey, Len(m.lcKey), @lnSize, 0) == 0
+	EndIf 
+	
+	*--------------------------------------------------------------------------------------
+	* When we cannot export the key we return an empty value.
+	*--------------------------------------------------------------------------------------
+	If not m.llOK
+		lcKey = ""
+	EndIf 
+	
+Return m.lcKey
+
+*========================================================================================
+* Encrypts data using the RSA algorithm and PKCS1 padding.
+*========================================================================================
+Procedure Encrypt_RSA (tcData, tcPublicKey)
+
+	*--------------------------------------------------------------------------------------
+	* Stop when we encounter a failure
+	*--------------------------------------------------------------------------------------
+	Local llOK
+	llOK = .T.
+
+	*--------------------------------------------------------------------------------------
+	* Get a handle to the RSA algorithm provider
+	*--------------------------------------------------------------------------------------
+	Local lnAlg
+	lnAlg = 0
+	If m.llOK
+		llOK = BCryptOpenAlgorithmProvider (@lnAlg, Strconv("RSA",5)+Chr(0), NULL, 0 ) == 0
+	EndIf
+
+	*--------------------------------------------------------------------------------------
+	* Create a new key pair and import the public key. This leaves us with a key pair
+	* that does not have a private key. We can only use this key for encryption.
+	*--------------------------------------------------------------------------------------
+	Local lnKey
+	lnKey = 0
+	If m.llOK
+		llOK = BCryptImportKeyPair ( ;
+			m.lnAlg, 0, Strconv("RSAPUBLICBLOB",5)+Chr(0), @lnKey, ;
+			m.tcPublicKey, Len(m.tcPublicKey), 0) == 0
+	EndIf 
+	
+	*--------------------------------------------------------------------------------------
+	* RSA is a fixed length algorithm. Plain text´and cipher text have fixed length. We
+	* use PKCS1 padding to pad shorter blocks. Determine the size of ciphertext.
+	*--------------------------------------------------------------------------------------
+	Local lnSize
+	If m.llOK
+		lnSize = 0
+		llOK = BCryptEncrypt ( ;
+			m.lnKey, m.tcData, Len(m.tcData), NULL, NULL, 0, NULL, 0, @lnSize, ;
+			BCRYPT_PAD_PKCS1) == 0
+	EndIf 
+	
+	*--------------------------------------------------------------------------------------
+	* Encrypt the data blob using PKCS1 padding
+	*--------------------------------------------------------------------------------------
+	Local lcEncrypted
+	If m.llOK
+		lcEncrypted = Space(m.lnSize)
+		llOK = BCryptEncrypt ( ;
+			m.lnKey, m.tcData, Len(m.tcData), NULL, NULL, 0, @lcEncrypted, ;
+			Len(m.lcEncrypted), @lnSize, BCRYPT_PAD_PKCS1) == 0
+	EndIf 
+
+	*--------------------------------------------------------------------------------------
+	* Cleanup
+	*--------------------------------------------------------------------------------------
+	If m.lnAlg != 0
+		BCryptCloseAlgorithmProvider( m.lnAlg, 0 )
+	EndIf 
+	If m.lnKey != 0
+		BCryptDestroyKey( m.lnKey )
+	EndIf
+	If not m.llOK
+		lcEncrypted = ""
+	EndIf 
+
+Return m.lcEncrypted
+
+*========================================================================================
+* Decrypts data using the RSA algorithm and PKCS1 padding.
+*========================================================================================
+Procedure Decrypt_RSA (tcData, tcPrivateKey)
+
+	*--------------------------------------------------------------------------------------
+	* Stop when we encounter a failure
+	*--------------------------------------------------------------------------------------
+	Local llOK
+	llOK = .T.
+
+	*--------------------------------------------------------------------------------------
+	* Get a handle to the RSA algorithm provider
+	*--------------------------------------------------------------------------------------
+	Local lnAlg
+	lnAlg = 0
+	If m.llOK
+		llOK = BCryptOpenAlgorithmProvider (@lnAlg, Strconv("RSA",5)+Chr(0), NULL, 0 ) == 0
+	EndIf
+
+	*--------------------------------------------------------------------------------------
+	* Create a new key pair and import the private key.
+	*--------------------------------------------------------------------------------------
+	Local lnKey
+	lnKey = 0
+	If m.llOK
+		llOK = BCryptImportKeyPair ( ;
+			m.lnAlg, 0, Strconv("RSAPRIVATEBLOB",5)+Chr(0), @lnKey, ;
+			m.tcPrivateKey, Len(m.tcPrivateKey), 0) == 0
+	EndIf 
+	
+	*--------------------------------------------------------------------------------------
+	* RSA is a fixed length algorithm. Plain text´and cipher text have fixed length. We
+	* use PKCS1 padding to pad shorter blocks. Determine the size of ciphertext.
+	*--------------------------------------------------------------------------------------
+	Local lnSize
+	If m.llOK
+		lnSize = 0
+		llOK = BCryptDecrypt ( ;
+			m.lnKey, m.tcData, Len(m.tcData), NULL, NULL, 0, NULL, 0, @lnSize, ;
+			BCRYPT_PAD_PKCS1) == 0
+	EndIf 
+	
+	*--------------------------------------------------------------------------------------
+	* Decrypt the data blob using PKCS1 padding
+	*--------------------------------------------------------------------------------------
+	Local lcDecrypted
+	If m.llOK
+		lcDecrypted = Space(m.lnSize)
+		llOK = BCryptDecrypt ( ;
+			m.lnKey, m.tcData, Len(m.tcData), NULL, NULL, 0, @lcDecrypted, ;
+			Len(m.lcDecrypted), @lnSize, BCRYPT_PAD_PKCS1) == 0
+	EndIf 
+
+	*--------------------------------------------------------------------------------------
+	* Cleanup
+	*--------------------------------------------------------------------------------------
+	If m.lnAlg != 0
+		BCryptCloseAlgorithmProvider( m.lnAlg, 0 )
+	EndIf 
+	If m.lnKey != 0
+		BCryptDestroyKey( m.lnKey )
+	EndIf
+	If not m.llOK
+		lcEncrypted = ""
+	EndIf 
+
+Return m.lcDecrypted
+
+*========================================================================================
+* Encrypts data with the symmetric AES Algorithm. Data can be any length. However, the
+* length of the key (password) defines the AES algorithm that is used. Only the following
+* three key lengths are allowed:
+*
+*   16 chars = AES-128
+*   24 chars = AES-192
+*   32 chars = AES-256
+*========================================================================================
+Procedure Encrypt_AES (tcData, tcKey)
+
+	*--------------------------------------------------------------------------------------
+	* Stop when we encounter a failure
+	*--------------------------------------------------------------------------------------
+	Local llOK
+	llOK = .T.
+	
+	*--------------------------------------------------------------------------------------
+	* Get a handle to the AES algorithm provider
+	*--------------------------------------------------------------------------------------
+	Local lnAlg
+	lnAlg = 0
+	If m.llOK
+		llOK = BCryptOpenAlgorithmProvider( ;
+			@lnAlg, Strconv("AES"+Chr(0),5), NULL, 0 ) == 0
+	EndIf
+
+	*--------------------------------------------------------------------------------------
+	* Turn the key into a symmetric key object that we can pass to the encryption funtion.
+	*--------------------------------------------------------------------------------------
+	Local lnKey
+	lnKey = 0
+	If m.llOK
+		llOK = BCryptGenerateSymmetricKey ( ;
+			m.lnAlg, @lnKey, NULL, 0, @tcKey, Len (m.tcKey), 0) == 0
+	EndIf 
+	
+	*--------------------------------------------------------------------------------------
+	* AES is a block cipher. The size of encrypted data is a multiple of the block size
+	* which is based on the key length. We let the algorithm provider determine the actual
+	* length.
+	*--------------------------------------------------------------------------------------
+	Local lnSize
+	If m.llOK
+		lnSize = 0
+		llOK = BCryptEncrypt ( ;
+			m.lnKey, m.tcData, Len(m.tcData), NULL, NULL, 0, NULL, 0, ;
+			@lnSize, BCRYPT_BLOCK_PADDING) == 0
+	EndIf 
+	
+	*--------------------------------------------------------------------------------------
+	* Now we can finally encrypt data
+	*--------------------------------------------------------------------------------------
+	Local lcEncrypted
+	If m.llOK
+		lcEncrypted = Space (m.lnSize)
+		llOK = BCryptEncrypt ( ;
+			m.lnKey, m.tcData, Len(m.tcData), NULL, NULL, 0, @lcEncrypted, ;
+			Len(m.lcEncrypted), @lnSize, BCRYPT_BLOCK_PADDING) == 0
+	EndIf 
+	
+	*--------------------------------------------------------------------------------------
+	* Properly close any open handle. We return an empty varbinary value if any error 
+	* occurred.
+	*--------------------------------------------------------------------------------------
+	If m.lnKey != 0
+		BCryptDestroyKey (m.lnKey)
+	EndIf
+	If m.lnAlg != 0
+		BCryptCloseAlgorithmProvider (m.lnAlg, 0)
+	EndIf 
+	If not m.llOK
+		lcEncrypted = ""
+	EndIf 
+
+Return m.lcEncrypted
+
+*========================================================================================
+* Decrypts data with the symmetric AES Algorithm. The length of the key (password) 
+* defines the AES algorithm that is used. Only the following three key lengths are 
+* allowed:
+*
+*   16 chars = AES-128
+*   24 chars = AES-192
+*   32 chars = AES-256
+*
+* Important: The resulting value is always padded with blanks up to the block length used
+*            by the algorithm. For plain text you can simply RTRIM() the result. For 
+*            binary data you have to know the length of the original data before 
+*            encryption.
+*========================================================================================
+Procedure Decrypt_AES (tcData, tcKey)
+
+	*--------------------------------------------------------------------------------------
+	* Stop when we encounter a failure
+	*--------------------------------------------------------------------------------------
+	Local llOK
+	llOK = .T.
+	
+	*--------------------------------------------------------------------------------------
+	* Get a handle to the AES algorithm provider
+	*--------------------------------------------------------------------------------------
+	Local lnAlg
+	lnAlg = 0
+	If m.llOK
+		llOK = BCryptOpenAlgorithmProvider( ;
+			@lnAlg, Strconv("AES"+Chr(0),5), NULL, 0 ) == 0
+	EndIf
+	
+	*--------------------------------------------------------------------------------------
+	* Turn the key into a symmetric key object that we can pass to the encryption funtion.
+	*--------------------------------------------------------------------------------------
+	Local lnKey
+	lnKey = 0
+	If m.llOK
+		llOK = BCryptGenerateSymmetricKey ( ;
+			m.lnAlg, @lnKey, NULL, 0, @tcKey, Len (m.tcKey), 0) == 0
+	EndIf 
+	
+	*--------------------------------------------------------------------------------------
+	* We ask the AES provider for the length of our data.
+	*--------------------------------------------------------------------------------------
+	Local lnSize
+	If m.llOK
+		lnSize = 0
+		llOK = BCryptDecrypt ( ;
+			m.lnKey, m.tcData, Len(m.tcData), NULL, NULL, 0, NULL, 0, ;
+			@lnSize, BCRYPT_BLOCK_PADDING) == 0
+	EndIf 
+	
+	*--------------------------------------------------------------------------------------
+	* Now we can finally decrypt data. We pad the buffer with blanks. CNG will not over-
+	* write the last few bytes due to padding.
+	*--------------------------------------------------------------------------------------
+	Local lcDecrypted
+	If m.llOK
+		lcDecrypted = Space (m.lnSize)
+		llOK = BCryptDecrypt ( ;
+			m.lnKey, m.tcData, Len(m.tcData), NULL, NULL, 0, @lcDecrypted, ;
+			Len(m.lcDecrypted), @lnSize, BCRYPT_BLOCK_PADDING) == 0
+	EndIf 
+	
+	*--------------------------------------------------------------------------------------
+	* Properly close any open handle. We return an empty varbinary value if any error 
+	* occurred.
+	*--------------------------------------------------------------------------------------
+	If m.lnKey != 0
+		BCryptDestroyKey (m.lnKey)
+	EndIf
+	If m.lnAlg != 0
+		BCryptCloseAlgorithmProvider (m.lnAlg, 0)
+	EndIf 
+	If not m.llOK
+		lcDecrypted = ""
+	EndIf 
+
+Return m.lcDecrypted
 
 EndDefine

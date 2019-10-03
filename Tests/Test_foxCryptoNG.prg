@@ -51,5 +51,60 @@ Procedure Test_Hash_SHA512
 		,m.lcHash ;
 	)
 
+*========================================================================================
+Procedure Test_GenerateKeys_RSA
+	Local loRef, lcPrivate, lcPublic
+	loRef = NewObject ("foxCryptoNG", "foxCryptoNG.prg")
+	loRef.GenerateKeys_RSA (@lcPrivate, @lcPublic)
+	This.AssertNotEmpty (m.lcPrivate, "private 2048")
+	This.AssertNotEmpty (m.lcPublic, "public 2048")
+	loRef.GenerateKeys_RSA (@lcPrivate, @lcPublic, 2400)
+	This.AssertNotEmpty (m.lcPrivate, "private 2400")
+	This.AssertNotEmpty (m.lcPublic, "public 2400")
+
+*========================================================================================
+Procedure Test_Encrypt_RSA
+	Local loRef, lcPublic, lcCipher
+	loRef = NewObject ("foxCryptoNG", "foxCryptoNG.prg")
+	loRef.GenerateKeys_RSA (, @lcPublic)
+	lcCipher = loRef.Encrypt_RSA ("FoxPro rocks!", m.lcPublic)
+	This.AssertNotEmpty (m.lcCipher)
+	This.AssertEquals (2048, Len (m.lcCipher)*8)
+
+*========================================================================================
+Procedure Test_Decrypt_RSA
+	Local loRef, lcPrivate, lcPublic, lcCipher, lcPlainText
+	loRef = NewObject ("foxCryptoNG", "foxCryptoNG.prg")
+	loRef.GenerateKeys_RSA (@lcPrivate, @lcPublic)
+	lcCipher = loRef.Encrypt_RSA ("FoxPro rocks!", m.lcPublic)
+	lcPlainText = loRef.Decrypt_RSA (m.lcCipher, m.lcPrivate)
+	This.AssertEquals ("FoxPro rocks!", m.lcPlainText)
+	
+*========================================================================================
+Procedure Test_Encrypt_AES128
+	Local loRef, lcEncrypted
+	loRef = NewObject ("foxCryptoNG", "foxCryptoNG.prg")
+	lcEncrypted = loRef.Encrypt_AES ("FoxPro rocks!", "0123456789ABCDEF")
+	This.AssertEquals ( ;
+		 0h382ACC77D1ABD5359495830F7DF6C6C5;
+		,Cast (m.lcEncrypted as varbinary(16));
+	)
+
+*========================================================================================
+Procedure Test_Decrypt_AES128
+	Local loRef, lcDecrypted
+	loRef = NewObject ("foxCryptoNG", "foxCryptoNG.prg")
+	lcDecrypted = loRef.Decrypt_AES ( ;
+		0h382ACC77D1ABD5359495830F7DF6C6C5, "0123456789ABCDEF")
+	This.AssertEquals (Padr ("FoxPro rocks!", 16), m.lcDecrypted)
+
+*========================================================================================
+Procedure Test_EncryptDecrypt_AES128_Binary
+	Local loRef, lcData, lcEncrypted, lcDecrypted
+	loRef = NewObject ("foxCryptoNG", "foxCryptoNG.prg")
+	lcData = Chr(1) + Chr(2) + Chr(3) + Chr(4) + Chr(5)
+	lcEncrypted = loRef.Encrypt_AES (m.lcData, "0123456789ABCDEF")
+	lcDecrypted = loRef.Decrypt_AES (m.lcEncrypted, "0123456789ABCDEF")
+	This.AssertEquals (Padr(m.lcData, 16), m.lcDecrypted)
 
 EndDefine
