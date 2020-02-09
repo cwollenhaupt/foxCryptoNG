@@ -546,7 +546,7 @@ Return m.lcDecrypted
 *   24 chars = AES-192
 *   32 chars = AES-256
 *========================================================================================
-Procedure Encrypt_AES (tcData, tcKey)
+Procedure Encrypt_AES (tcData, tcKey, tcIV)
 
 	*--------------------------------------------------------------------------------------
 	* Stop when we encounter a failure
@@ -580,22 +580,37 @@ Procedure Encrypt_AES (tcData, tcKey)
 	* length.
 	*--------------------------------------------------------------------------------------
 	Local lnSize
+	Local lcIV
 	If m.llOK
 		lnSize = 0
-		llOK = BCryptEncrypt ( ;
-			m.lnKey, m.tcData, Len(m.tcData), NULL, NULL, 0, NULL, 0, ;
-			@lnSize, BCRYPT_BLOCK_PADDING) == 0
-	EndIf 
-	
+		If PCount() > 2
+			m.lcIV = m.tcIV
+			llOK = BCryptEncrypt ( ;
+				m.lnKey, m.tcData, Len(m.tcData), NULL, @m.lcIV, Len(m.lcIV), NULL, 0, ;
+				@lnSize, BCRYPT_BLOCK_PADDING) == 0
+		Else
+			llOK = BCryptEncrypt ( ;
+				m.lnKey, m.tcData, Len(m.tcData), NULL, NULL, 0, NULL, 0, ;
+				@lnSize, BCRYPT_BLOCK_PADDING) == 0
+		EndIf
+	EndIf
+
 	*--------------------------------------------------------------------------------------
 	* Now we can finally encrypt data
 	*--------------------------------------------------------------------------------------
 	Local lcEncrypted
 	If m.llOK
 		lcEncrypted = Space (m.lnSize)
-		llOK = BCryptEncrypt ( ;
-			m.lnKey, m.tcData, Len(m.tcData), NULL, NULL, 0, @lcEncrypted, ;
-			Len(m.lcEncrypted), @lnSize, BCRYPT_BLOCK_PADDING) == 0
+		If PCount() > 2
+			m.lcIV = m.tcIV
+			llOK = BCryptEncrypt ( ;
+				m.lnKey, m.tcData, Len(m.tcData), NULL, @m.lcIV, Len(m.lcIV), @lcEncrypted, ;
+				Len(m.lcEncrypted), @lnSize, BCRYPT_BLOCK_PADDING) == 0
+		Else
+			llOK = BCryptEncrypt ( ;
+				m.lnKey, m.tcData, Len(m.tcData), NULL, NULL, 0, @lcEncrypted, ;
+				Len(m.lcEncrypted), @lnSize, BCRYPT_BLOCK_PADDING) == 0
+		EndIf
 	EndIf 
 	
 	*--------------------------------------------------------------------------------------
@@ -628,7 +643,7 @@ Return m.lcEncrypted
 *            binary data you have to know the length of the original data before 
 *            encryption.
 *========================================================================================
-Procedure Decrypt_AES (tcData, tcKey)
+Procedure Decrypt_AES (tcData, tcKey, tcIV)
 
 	*--------------------------------------------------------------------------------------
 	* Stop when we encounter a failure
@@ -660,13 +675,21 @@ Procedure Decrypt_AES (tcData, tcKey)
 	* We ask the AES provider for the length of our data.
 	*--------------------------------------------------------------------------------------
 	Local lnSize
+	Local lcIV
 	If m.llOK
 		lnSize = 0
-		llOK = BCryptDecrypt ( ;
-			m.lnKey, m.tcData, Len(m.tcData), NULL, NULL, 0, NULL, 0, ;
-			@lnSize, BCRYPT_BLOCK_PADDING) == 0
-	EndIf 
-	
+		If PCount() > 2
+			m.lcIV = m.tcIV
+			llOK = BCryptDecrypt ( ;
+				m.lnKey, m.tcData, Len(m.tcData), NULL, @m.lcIV, Len(m.lcIV), NULL, 0, ;
+				@lnSize, BCRYPT_BLOCK_PADDING) == 0
+		Else
+			llOK = BCryptDecrypt ( ;
+				m.lnKey, m.tcData, Len(m.tcData), NULL, NULL, 0, NULL, 0, ;
+				@lnSize, BCRYPT_BLOCK_PADDING) == 0
+		EndIf 
+	EndIf
+
 	*--------------------------------------------------------------------------------------
 	* Now we can finally decrypt data. We pad the buffer with blanks. CNG will not over-
 	* write the last few bytes due to padding.
@@ -674,9 +697,16 @@ Procedure Decrypt_AES (tcData, tcKey)
 	Local lcDecrypted
 	If m.llOK
 		lcDecrypted = Space (m.lnSize)
-		llOK = BCryptDecrypt ( ;
-			m.lnKey, m.tcData, Len(m.tcData), NULL, NULL, 0, @lcDecrypted, ;
-			Len(m.lcDecrypted), @lnSize, BCRYPT_BLOCK_PADDING) == 0
+		If PCount() > 2
+			m.lcIV = m.tcIV
+			llOK = BCryptDecrypt ( ;
+				m.lnKey, m.tcData, Len(m.tcData), NULL, @m.lcIV, Len(m.lcIV), @lcDecrypted, ;
+				Len(m.lcDecrypted), @lnSize, BCRYPT_BLOCK_PADDING) == 0
+		Else
+			llOK = BCryptDecrypt ( ;
+				m.lnKey, m.tcData, Len(m.tcData), NULL, NULL, 0, @lcDecrypted, ;
+				Len(m.lcDecrypted), @lnSize, BCRYPT_BLOCK_PADDING) == 0
+		EndIf
 	EndIf 
 	
 	*--------------------------------------------------------------------------------------
