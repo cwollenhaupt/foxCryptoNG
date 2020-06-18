@@ -1,4 +1,5 @@
 *.FXP
+*.BAK
 /Tests/FXUPERSIST*.XML
 /Tests/FXUResults.*
 /Tools/FxuClassFactory.dbf
