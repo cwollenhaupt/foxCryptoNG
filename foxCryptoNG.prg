@@ -40,6 +40,21 @@ Procedure Init
 	This.DeclareApiFunctions ()
 
 *========================================================================================
+* Creates a SHA-1 hash value. This was the default when you created SHA hashes with the
+* old Windows XP Crypto API or the _Crypt.VCX library shipped by Microsoft along with 
+* VFP 9 as part of the FoxPro Foundation Classes.
+*
+* CAUTION: This method is provided for backward compatibility only. SHA-1 is not a secure
+*          hashing algorithm and should not be used in new development. Only use this
+*          method if you have previously created and stored hashes and no possibility
+*          to recalculate the hashes using a secure hashing algorithm.
+*========================================================================================
+Procedure Hash_SHA1 (tcData)
+	Local lcHash
+	lcHash = This.HashData ("SHA1", m.tcData)
+Return m.lcHash
+
+*========================================================================================
 * Creates a SHA-256 hash value.
 *========================================================================================
 Procedure Hash_SHA256 (tcData)
