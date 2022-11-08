@@ -1,5 +1,5 @@
 *========================================================================================
-* Copyright 2007-2019 Christof Wollenhaupt
+* Copyright 2007-2022 Christof Wollenhaupt
 * 
 * Permission is hereby granted, free of charge, to any person obtaining a copy of this 
 * software and associated documentation files (the "Software"), to deal in the Software
@@ -106,5 +106,15 @@ Procedure Test_EncryptDecrypt_AES128_Binary
 	lcEncrypted = loRef.Encrypt_AES (m.lcData, "0123456789ABCDEF")
 	lcDecrypted = loRef.Decrypt_AES (m.lcEncrypted, "0123456789ABCDEF")
 	This.AssertEquals (Padr(m.lcData, 16), m.lcDecrypted)
+
+*========================================================================================
+Procedure Test_Hash_MD5
+	Local loRef, lcHash
+	loRef = NewObject ("foxCryptoNG", "foxCryptoNG.prg")
+	lcHash = loRef.Hash_MD5 ("FoxPro rocks!")
+	This.AssertEquals ( ;
+		 "7B88209343F736B5F2E14E30E8432B74" ;
+		,m.lcHash ;
+	)
 
 EndDefine

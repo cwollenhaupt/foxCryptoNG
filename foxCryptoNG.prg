@@ -1,7 +1,7 @@
 *========================================================================================
 * Implements an easier to use interface to Microsoft's Cryptography Next Generation API.
 *
-* Copyright 2007-2019 Christof Wollenhaupt
+* Copyright 2007-2022 Christof Wollenhaupt
 * 
 * Permission is hereby granted, free of charge, to any person obtaining a copy of this 
 * software and associated documentation files (the "Software"), to deal in the Software
@@ -38,6 +38,20 @@ Define Class foxCryptoNG as Custom
 *========================================================================================
 Procedure Init
 	This.DeclareApiFunctions ()
+
+*========================================================================================
+* Creates an MD5 hash value. MD5 was used in the _Crypt.VCX library shipped by Microsoft 
+* along with VFP 9 as part of the FoxPro Foundation Classes.
+*
+* CAUTION: This method is provided for backward compatibility only. MD5 is not a secure
+*          hashing algorithm and should not be used in new development. Only use this
+*          method if you have previously created and stored hashes and no possibility
+*          to recalculate the hashes using a secure hashing algorithm.
+*========================================================================================
+Procedure Hash_MD5 (tcData)
+	Local lcHash
+	lcHash = This.HashData ("MD5", m.tcData)
+Return m.lcHash
 
 *========================================================================================
 * Creates a SHA-1 hash value. This was the default when you created SHA hashes with the
@@ -553,7 +567,7 @@ Procedure Decrypt_RSA (tcData, tcPrivateKey)
 Return m.lcDecrypted
 
 *========================================================================================
-* Encrypts data with the symmetric AES Algorithm. Data can be any length. However, the
+* Encrypts data with the symmetric AES algorithm. Data can be any length. However, the
 * length of the key (password) defines the AES algorithm that is used. Only the following
 * three key lengths are allowed:
 *
@@ -562,6 +576,37 @@ Return m.lcDecrypted
 *   32 chars = AES-256
 *========================================================================================
 Procedure Encrypt_AES (tcData, tcKey, tcIV)
+	Local lcEncrypted
+	If Pcount() > 2
+		lcEncrypted = This.Encrypt_SymmetricBlock ("AES", m.tcData, m.tcKey, m.tcIV)
+	Else
+		lcEncrypted = This.Encrypt_SymmetricBlock ("AES", m.tcData, m.tcKey)
+	EndIf
+Return m.lcEncrypted 	
+
+*========================================================================================
+* Encrypts data the symmetric RC2 algorithm. Data can be any length. The length of the
+* key should either be 
+*
+*    5 chars =  40 bit
+*   16 chars = 128 bit
+*
+* CAUTION: This method is provided for backward compatibility only. RC2 is not a secure
+*          encryption algorithm and should not be used in new development.
+*========================================================================================
+Procedure Encrypt_RC2 (tcData, tcKey, tcIV)
+	Local lcEncrypted
+	If Pcount() > 2
+		lcEncrypted = This.Encrypt_SymmetricBlock ("RC2", m.tcData, m.tcKey, m.tcIV)
+	Else
+		lcEncrypted = This.Encrypt_SymmetricBlock ("RC2", m.tcData, m.tcKey)
+	EndIf
+Return m.lcEncrypted 	
+	
+*========================================================================================
+* Encrypts data with any symmetric block cipher.
+*========================================================================================
+Procedure Encrypt_SymmetricBlock (tcAlgorithm, tcData, tcKey, tcIV)
 
 	*--------------------------------------------------------------------------------------
 	* Stop when we encounter a failure
@@ -570,13 +615,13 @@ Procedure Encrypt_AES (tcData, tcKey, tcIV)
 	llOK = .T.
 	
 	*--------------------------------------------------------------------------------------
-	* Get a handle to the AES algorithm provider
+	* Get a handle to the algorithm provider
 	*--------------------------------------------------------------------------------------
 	Local lnAlg
 	lnAlg = 0
 	If m.llOK
 		llOK = BCryptOpenAlgorithmProvider( ;
-			@lnAlg, Strconv("AES"+Chr(0),5), NULL, 0 ) == 0
+			@lnAlg, Strconv(m.tcAlgorithm+Chr(0),5), NULL, 0 ) == 0
 	EndIf
 
 	*--------------------------------------------------------------------------------------
@@ -590,7 +635,7 @@ Procedure Encrypt_AES (tcData, tcKey, tcIV)
 	EndIf 
 	
 	*--------------------------------------------------------------------------------------
-	* AES is a block cipher. The size of encrypted data is a multiple of the block size
+	* We handle a block ciphers. The size of encrypted data is a multiple of the block size
 	* which is based on the key length. We let the algorithm provider determine the actual
 	* length.
 	*--------------------------------------------------------------------------------------
@@ -598,7 +643,7 @@ Procedure Encrypt_AES (tcData, tcKey, tcIV)
 	Local lcIV
 	If m.llOK
 		lnSize = 0
-		If PCount() > 2
+		If PCount() > 3
 			m.lcIV = m.tcIV
 			llOK = BCryptEncrypt ( ;
 				m.lnKey, m.tcData, Len(m.tcData), NULL, @m.lcIV, Len(m.lcIV), NULL, 0, ;
@@ -616,7 +661,7 @@ Procedure Encrypt_AES (tcData, tcKey, tcIV)
 	Local lcEncrypted
 	If m.llOK
 		lcEncrypted = Space (m.lnSize)
-		If PCount() > 2
+		If PCount() > 3
 			m.lcIV = m.tcIV
 			llOK = BCryptEncrypt ( ;
 				m.lnKey, m.tcData, Len(m.tcData), NULL, @m.lcIV, Len(m.lcIV), @lcEncrypted, ;
@@ -659,6 +704,37 @@ Return m.lcEncrypted
 *            encryption.
 *========================================================================================
 Procedure Decrypt_AES (tcData, tcKey, tcIV)
+	Local lcDecrypted
+	If Pcount() > 2
+		lcDecrypted = This.Decrypt_SymmetricBlock ("AES", m.tcData, m.tcKey, m.tcIV)
+	Else
+		lcDecrypted = This.Decrypt_SymmetricBlock ("AES", m.tcData, m.tcKey)
+	EndIf
+Return m.lcDecrypted
+
+*========================================================================================
+* Decrypts data the symmetric RC2 algorithm. Data can be any length. The length of the
+* key should either be 
+*
+*    5 chars =  40 bit
+*   16 chars = 128 bit
+*
+* CAUTION: This method is provided for backward compatibility only. RC2 is not a secure
+*          encryption algorithm and should not be used in new development.
+*========================================================================================
+Procedure Decrypt_RC2 (tcData, tcKey, tcIV)
+	Local lcDecrypted
+	If Pcount() > 2
+		lcDecrypted = This.Decrypt_SymmetricBlock ("RC2", m.tcData, m.tcKey, m.tcIV)
+	Else
+		lcDecrypted = This.Decrypt_SymmetricBlock ("RC2", m.tcData, m.tcKey)
+	EndIf
+Return m.lcDecrypted 	
+	
+*========================================================================================
+* Decrypts data with a symmetric block based algorithm.
+*========================================================================================
+Procedure Decrypt_SymmetricBlock (tcAlgorithm, tcData, tcKey, tcIV)
 
 	*--------------------------------------------------------------------------------------
 	* Stop when we encounter a failure
@@ -667,13 +743,13 @@ Procedure Decrypt_AES (tcData, tcKey, tcIV)
 	llOK = .T.
 	
 	*--------------------------------------------------------------------------------------
-	* Get a handle to the AES algorithm provider
+	* Get a handle to the requested algorithm provider
 	*--------------------------------------------------------------------------------------
 	Local lnAlg
 	lnAlg = 0
 	If m.llOK
 		llOK = BCryptOpenAlgorithmProvider( ;
-			@lnAlg, Strconv("AES"+Chr(0),5), NULL, 0 ) == 0
+			@lnAlg, Strconv(m.tcAlgorithm+Chr(0),5), NULL, 0 ) == 0
 	EndIf
 	
 	*--------------------------------------------------------------------------------------
@@ -687,13 +763,13 @@ Procedure Decrypt_AES (tcData, tcKey, tcIV)
 	EndIf 
 	
 	*--------------------------------------------------------------------------------------
-	* We ask the AES provider for the length of our data.
+	* We ask the algorithm provider for the length of our data.
 	*--------------------------------------------------------------------------------------
 	Local lnSize
 	Local lcIV
 	If m.llOK
 		lnSize = 0
-		If PCount() > 2
+		If PCount() > 3
 			m.lcIV = m.tcIV
 			llOK = BCryptDecrypt ( ;
 				m.lnKey, m.tcData, Len(m.tcData), NULL, @m.lcIV, Len(m.lcIV), NULL, 0, ;
@@ -712,7 +788,7 @@ Procedure Decrypt_AES (tcData, tcKey, tcIV)
 	Local lcDecrypted
 	If m.llOK
 		lcDecrypted = Space (m.lnSize)
-		If PCount() > 2
+		If PCount() > 3
 			m.lcIV = m.tcIV
 			llOK = BCryptDecrypt ( ;
 				m.lnKey, m.tcData, Len(m.tcData), NULL, @m.lcIV, Len(m.lcIV), @lcDecrypted, ;
