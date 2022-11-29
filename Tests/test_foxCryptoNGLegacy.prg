@@ -37,7 +37,7 @@ Procedure Test_LegacyEncryptSessionBlockString
 	lcData = "FoxPro rocks!"
 	lcKey = "0123456789ABCDEF"
 	lcEncrypted = ""
-	llOk = loRef.LegacyEncryptSessionBlockString (m.lcData, m.lcKey, @lcEncrypted)
+	llOk = loRef.EncryptSessionBlockString (m.lcData, m.lcKey, @lcEncrypted)
 	This.AssertTrue (m.llOk)		
 	This.AssertEquals ( ;
 		 0hCFC45FB18C60E3099BBB785F2DABE24E ;
@@ -51,7 +51,7 @@ Procedure Test_LegacyEncryptSessionBlockString
 	lcData = "FoxPro rocks!"
 	lcKey = "0123456789ABCDEF"
 	lcEncrypted = ""
-	llOk = loRef.LegacyEncryptSessionBlockString (m.lcData, m.lcKey, @lcEncrypted)
+	llOk = loRef.EncryptSessionBlockString (m.lcData, m.lcKey, @lcEncrypted)
 	This.AssertTrue (m.llOk)
 	This.AssertEquals ( ;
 		 0hCFC45FB18C60E3099BBB785F2DABE24E ;
@@ -65,7 +65,7 @@ Procedure Test_LegacyDecryptSessionBlockString
 	lcData = Strconv ("CFC45FB18C60E3099BBB785F2DABE24E", 16)
 	lcKey = "0123456789ABCDEF"
 	lcDecrypted = ""
-	llOk = loRef.LegacyDecryptSessionBlockString (m.lcData, m.lcKey, @lcDecrypted)
+	llOk = loRef.DecryptSessionBlockString (m.lcData, m.lcKey, @lcDecrypted)
 	This.AssertTrue (m.llOk)
 	This.AssertEquals ("FoxPro rocks!", m.lcDecrypted)
 

@@ -52,7 +52,7 @@ Define Class foxCryptoNGLegacy as Custom
 *========================================================================================
 * Implements the same interface as the EncryptSessionBlockString method in _Crypt.vcx.
 *========================================================================================
-Procedure LegacyEncryptSessionBlockString (tcData, tcKey, rcEncrypted)
+Procedure EncryptSessionBlockString (tcData, tcKey, rcEncrypted)
 
 	*--------------------------------------------------------------------------------------
 	* Stop when we encounter a failure. All encryption routines are in foxCryptoNG.
@@ -96,7 +96,7 @@ Return m.llOK
 *========================================================================================
 * Implements the same interface as the DecryptSessionBlockString method in _Crypt.vcx.
 *========================================================================================
-Procedure LegacyDecryptSessionBlockString (tcData, tcKey, rcDecrypted)
+Procedure DecryptSessionBlockString (tcData, tcKey, rcDecrypted)
 
 	*--------------------------------------------------------------------------------------
 	* Stop when we encounter a failure. All encryption routines are in foxCryptoNG.
