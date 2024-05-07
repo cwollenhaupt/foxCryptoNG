@@ -1,7 +1,7 @@
 *========================================================================================
 * Implements an easier to use interface to Microsoft's Cryptography Next Generation API.
 *
-* Copyright 2007-2022 Christof Wollenhaupt
+* Copyright 2007-2024 Christof Wollenhaupt
 * 
 * Permission is hereby granted, free of charge, to any person obtaining a copy of this 
 * software and associated documentation files (the "Software"), to deal in the Software
@@ -129,14 +129,22 @@ Procedure HashData (tcAlgorithm, tcData)
 	EndIf
 
 	*--------------------------------------------------------------------------------------
+	* Allocate memory for the hash object
+	*--------------------------------------------------------------------------------------
+	Local lnHashObj
+	If m.llOK
+		lnHashObj = HeapAlloc (GetProcessHeap (), 0, m.lnSizeObj)
+		llOK = m.lnHashObj <> 0
+	EndIf
+
+	*--------------------------------------------------------------------------------------
 	* Create the hash object
 	*--------------------------------------------------------------------------------------
-	Local lnHash, lcHashObj
+	Local lnHash
 	lnHash = 0
 	If m.llOK
-		lcHashObj = Space(m.lnSizeObj)
 		llOK = BCryptCreateHash( m.lnAlg, @lnHash, ;
-			@lcHashObj, m.lnSizeObj, NULL, 0, 0 ) == 0
+			lnHashObj, m.lnSizeObj, NULL, 0, 0 ) == 0
 	EndIf
 	
 	*--------------------------------------------------------------------------------------
@@ -175,6 +183,9 @@ Procedure HashData (tcAlgorithm, tcData)
 	If m.lnHash != 0
 		BCryptDestroyHash (m.lnHash)
 	EndIf
+	If not Empty (m.lnHashObj)
+		HeapFree (GetProcessHeap (), 0, m.lnHashObj)
+	EndIf
 	If not m.llOK
 		lcHash = ""
 	EndIf
@@ -183,9 +194,34 @@ Return m.lcHash
 
 *========================================================================================
 * Various API declarations
+*
+* If you repeatedly create an instance of foxCryptoNG, you will encounter a loss in
+* performance, because this method is executed every time. Declaring a function in a 
+* DLL that is not WIN32API is a slow operation in VFP.
+*
+* You can improve performance if you overide this method and make sure that it is only
+* called under the following circumstances:
+*
+* - The first time an instance of this class is created
+* - After your code re-declared some of these API functions with a different signature
+* - After CLEAR DLLS 
+*
+* In all other instances do NOT execute the base class behavior. If your application 
+* never clears declared DLLs and does not declare functions differently, the easiest
+* solution is a global flag that you check and set after the first call.
+*
+* Alternatively maintain one instance that you keep around and re-use for all purposes.
+*
+* Please note that you MUST call the base DeclareApiFunctions before calling any method
+* after redeclaring any of the functions declared in this method. For performance
+* reasons none of the other function calls DeclareApiFunctions. You will most likely
+* discover the need for this through Data Type Mismatch error messages.
 *========================================================================================
 Procedure DeclareApiFunctions
 
+	*--------------------------------------------------------------------------------------
+	* BCrypt functions
+	*--------------------------------------------------------------------------------------
 	Declare Long BCryptOpenAlgorithmProvider ;
 		in BCrypt.DLL ;
 		Long @phAlgorithm, ;
@@ -212,7 +248,7 @@ Procedure DeclareApiFunctions
 	Declare Long BCryptCreateHash in BCrypt.DLL ;
 		Long hAlgorithm, ;
 		Long @phHash, ;
-		String @pbHashObject, ;
+		Long pbHashObject, ;
 		Long cbHashObject, ;
 		String pbSecret, ;
 		Long cbSecret, ;
@@ -301,7 +337,22 @@ Procedure DeclareApiFunctions
 		String pbSecret, ;
 		Long cbSecret, ;
 		Long dwFlags
+		
+	*--------------------------------------------------------------------------------------
+	* Generic Windows memory management functions
+	*--------------------------------------------------------------------------------------
+	Declare Long HeapAlloc in win32api ;
+		Long hHeap, ;
+		Long dwFlags, ;
+		Long dwBytes
+
+	Declare Long GetProcessHeap in win32api
 	
+	Declare Long HeapFree in win32api ;
+		Long hHeap, ;
+		Long dwFlags, ;
+		Long lpMem
+		
 *========================================================================================
 * Generates a pair of public and private keys using the RSA (PKCS #1) algorithm. The
 * keys are returned in rcPrivate and rxPublic. These keys are binary data that is only
